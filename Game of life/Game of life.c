@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <locale.h>
+#include <string.h>
 #include <time.h>
 #include <glut.h>
 
@@ -8,22 +9,37 @@
 #define world_height 20
 #define world_width 20
 
+//структура для сохранения миров и последующей проверки периода
+struct worlds {
+	int game_world[world_width][world_height];
+	struct worlds *next;
+};
+
+//корень линейного списка
+struct wolrds *root;
+//для добавления элементов
+struct worlds *ptr;
+
 //для генерации мира
 int world[world_width][world_height];
 int prev_world[world_width][world_height];
 int first_world[world_width][world_height];
 
 //для цветов
-float worldR[world_width][world_height];
-float worldG[world_width][world_height];
-float worldB[world_width][world_height];
+int worldR[world_width][world_height];
+int worldG[world_width][world_height];
+int worldB[world_width][world_height];
 
-float prev_worldR[world_width][world_height];
-float prev_worldG[world_width][world_height];
-float prev_worldB[world_width][world_height];
+int prev_worldR[world_width][world_height];
+int prev_worldG[world_width][world_height];
+int prev_worldB[world_width][world_height];
 
 //переменные для состояния мира
-int liveCondition, condition, periodCondition;
+int liveCondition = 1, condition, periodCondition, new_period_condition;
+//для определения периода фигуры
+int period = 0;
+//для определения периода получившийся фигуры
+int received_period = 0;
 //размер поля для "игры жизнь"
 float WinWid = 400.0;
 float WinHight = 400.0;
@@ -56,11 +72,59 @@ void world_copy(int destination[world_width][world_height], int source[world_wid
 	}
 }
 
-void world_copy_color(float destination[world_width][world_height], float source[world_width][world_height]) {
+void world_copy_color(int destination[world_width][world_height], int source[world_width][world_height]) {
 	for (int i = 0; i < world_width; i++) {
 		for (int j = 0; j < world_height; j++) {
 			destination[i][j] = source[i][j];
 		}
+	}
+}
+
+struct worlds *create_root(int world[world_width][world_height]) {
+	struct worlds *ptr;
+	ptr = (struct worlds*)malloc(sizeof(struct worlds));
+	world_copy(ptr->game_world, world);
+	ptr->next = NULL;
+	return ptr;
+}
+
+struct worlds *create_elem(struct worlds *ptr, int world[world_width][world_height]) {
+	struct worlds *temp, *p;
+	temp = (struct worlds*)malloc(sizeof(struct worlds));
+	p = ptr->next;
+	world_copy(temp->game_world, world);
+	ptr->next = temp;
+	temp->next = p;
+	return temp;
+}
+
+void delete_worlds(struct worlds *root) {
+	struct worlds *temp;
+	temp = root;
+	while (temp != NULL) {
+		temp = root->next;
+		free(root);
+		root = temp;
+	}
+}
+
+int check_period(struct worlds *root, int world[world_width][world_height]) {
+	struct worlds *temp;
+	temp = root;
+	int period = 0;
+
+	while (temp != NULL) {
+		if (world_cmp(world, temp->game_world) == 1) {
+			
+			do {
+				temp = temp->next;
+				period++;
+				if (temp == NULL) return -1;
+			} while (world_cmp(world, temp->game_world) != 1);
+
+			return period;
+		}
+		temp = temp->next;
 	}
 }
 
@@ -107,9 +171,9 @@ int live_neighbours(int world[world_width][world_height], int x, int y) {
 	return count;
 }
 
-float live_neighbours_color(float world_color[world_width][world_height], int x, int y) {
+float live_neighbours_color(int world_color[world_width][world_height], int x, int y) {
 	int neighbours[8][2];
-	float color = 0;
+	int color = 0;
 	int dx, dy;
 
 	read_neighbours(neighbours, x, y);
@@ -129,10 +193,9 @@ float live_neighbours_color(float world_color[world_width][world_height], int x,
 		dx = neighbours[i][0];
 		dy = neighbours[i][1];
 
-		if (world_color[dx][dy] != 0.0) color += world_color[dx][dy];
+		if (world_color[dx][dy] != 0) color += world_color[dx][dy];
 	}
-	color /= 3.0;
-	color = 1.0 - color;
+	color /= 3;
 	
 	return color;
 }
@@ -149,16 +212,16 @@ void next_generation(int world[world_width][world_height], int prev_world[world_
 				if (lv == 3) {
 					world[i][j] = live;
 
-					worldR[i][j] = live_neighbours_color(worldR, i, j);
-					worldG[i][j] = live_neighbours_color(worldG, i, j);
-					worldB[i][j] = live_neighbours_color(worldB, i, j);
+					worldR[i][j] = live_neighbours_color(prev_worldR, i, j);
+					worldG[i][j] = live_neighbours_color(prev_worldG, i, j);
+					worldB[i][j] = live_neighbours_color(prev_worldB, i, j);
 				}
 				else {
 					world[i][j] = dead;
 
-					worldR[i][j] = 0.0;
-					worldG[i][j] = 0.0;
-					worldB[i][j] = 0.0;
+					worldR[i][j] = 0;
+					worldG[i][j] = 0;
+					worldB[i][j] = 0;
 				}
 			}
 			 
@@ -166,9 +229,9 @@ void next_generation(int world[world_width][world_height], int prev_world[world_
 				if (lv < 2 || lv > 3) {
 					world[i][j] = dead;
 
-					worldR[i][j] = 0.0;
-					worldG[i][j] = 0.0;
-					worldB[i][j] = 0.0;
+					worldR[i][j] = 0;
+					worldG[i][j] = 0;
+					worldB[i][j] = 0;
 				}
 				//else world[i][j] = live;
 			}
@@ -228,7 +291,7 @@ void null_world(int world[world_width][world_height]) {
 	}
 }
 
-void random_color(float worldR[world_width][world_height], float worldG[world_width][world_height], float worldB[world_width][world_height], int world[world_width][world_height]) {
+void random_color(int worldR[world_width][world_height], int worldG[world_width][world_height], int worldB[world_width][world_height], int world[world_width][world_height]) {
 	srand(time(NULL));
 
 	int value, colors;
@@ -236,59 +299,68 @@ void random_color(float worldR[world_width][world_height], float worldG[world_wi
 	for (int i = 0; i < world_width; i++) {
 		for (int j = 0; j < world_height; j++) {
 			if (world[i][j] == live) {
-				colors = rand() % 6 + 1;
+				colors = rand() % 7 + 1;
 
 				switch (colors) {
 				case 1:
 					value = rand() % 256;
-					worldR[i][j] = (float)value / 255;
-					worldG[i][j] = 0.0;
-					worldB[i][j] = 0.0;
+					worldR[i][j] = value;
+					worldG[i][j] = 0;
+					worldB[i][j] = 0;
 					break;
 
 				case 2:
 					value = rand() % 256;
-					worldG[i][j] = (float)value / 255;
-					worldR[i][j] = 0.0;
-					worldB[i][j] = 0.0;
+					worldG[i][j] = value;
+					worldR[i][j] = 0;
+					worldB[i][j] = 0;
 					break;
 
 				case 3:
 					value = rand() % 256;
-					worldB[i][j] = (float)value / 255;
-					worldG[i][j] = 0.0;
-					worldR[i][j] = 0.0;
+					worldB[i][j] = value;
+					worldG[i][j] = 0;
+					worldR[i][j] = 0;
 					break;
 
 				case 4:
 					value = rand() % 256;
-					worldR[i][j] = (float)value / 255;
+					worldR[i][j] = value;
 					value = rand() % 256;
-					worldG[i][j] = (float)value / 255;
-					worldB[i][j] = 0.0;
+					worldG[i][j] = value;
+					worldB[i][j] = 0;
 					break;
 
 				case 5:
 					value = rand() % 256;
-					worldG[i][j] = (float)value / 255;
+					worldG[i][j] = value;
 					value = rand() % 256;
-					worldB[i][j] = (float)value / 255;
-					worldR[i][j] = 0.0;
+					worldB[i][j] = value;
+					worldR[i][j] = 0;
 					break;
 
 				case 6:
 					value = rand() % 256;
-					worldR[i][j] = (float)value / 255;
+					worldR[i][j] = value;
 					value = rand() % 256;
-					worldB[i][j] = (float)value / 255;
-					worldG[i][j] = 0.0;
+					worldB[i][j] = value ;
+					worldG[i][j] = 0;
+					break;
+
+				case 7:
+					value = rand() % 256;
+					worldR[i][j] = value;
+					value = rand() % 256;
+					worldB[i][j] = value; 
+					value = rand() % 256;
+					worldG[i][j] = value;
 					break;
 				}
 			}
 			else {
-				worldR[i][j] = 0.0;
-				worldG[i][j] = 0.0;
-				worldB[i][j] = 0.0;
+				worldR[i][j] = 0;
+				worldG[i][j] = 0;
+				worldB[i][j] = 0;
 			}
 		}
 	}
@@ -328,67 +400,76 @@ void paint_cell(float x, float y) {
 	if (world[lDownY / 20][lDownX / 20] == live) {
 		world[lDownY / 20][lDownX / 20] = dead;
 
-		worldR[lDownY / 20][lDownX / 20] = 0.0;
-		worldG[lDownY / 20][lDownX / 20] = 0.0;
-		worldB[lDownY / 20][lDownX / 20] = 0.0;
+		worldR[lDownY / 20][lDownX / 20] = 0;
+		worldG[lDownY / 20][lDownX / 20] = 0;
+		worldB[lDownY / 20][lDownX / 20] = 0;
 	}
 	else {
 		world[lDownY / 20][lDownX / 20] = live;
 
-		colors = rand() % 6 + 1;
+		colors = rand() % 7 + 1;
 
 		switch (colors) {
 		case 1:
 			value = rand() % 256;
-			worldR[lDownY / 20][lDownX / 20] = (float)value / 255;
-			worldG[lDownY / 20][lDownX / 20] = 0.0;
-			worldB[lDownY / 20][lDownX / 20] = 0.0;
+			worldR[lDownY / 20][lDownX / 20] = value;
+			worldG[lDownY / 20][lDownX / 20] = 0;
+			worldB[lDownY / 20][lDownX / 20] = 0;
 			break;
 
 		case 2:
 			value = rand() % 256;
-			worldG[lDownY / 20][lDownX / 20] = (float)value / 255;
-			worldR[lDownY / 20][lDownX / 20] = 0.0;
-			worldB[lDownY / 20][lDownX / 20] = 0.0;
+			worldG[lDownY / 20][lDownX / 20] = value ;
+			worldR[lDownY / 20][lDownX / 20] = 0;
+			worldB[lDownY / 20][lDownX / 20] = 0;
 			break;
 
 		case 3:
 			value = rand() % 256;
-			worldB[lDownY / 20][lDownX / 20] = (float)value / 255;
-			worldG[lDownY / 20][lDownX / 20] = 0.0;
-			worldR[lDownY / 20][lDownX / 20] = 0.0;
+			worldB[lDownY / 20][lDownX / 20] = value;
+			worldG[lDownY / 20][lDownX / 20] = 0;
+			worldR[lDownY / 20][lDownX / 20] = 0;
 			break;
 
 		case 4:
 			value = rand() % 256;
-			worldR[lDownY / 20][lDownX / 20] = (float)value / 255;
+			worldR[lDownY / 20][lDownX / 20] = value;
 			value = rand() % 256;
-			worldG[lDownY / 20][lDownX / 20] = (float)value / 255;
-			worldB[lDownY / 20][lDownX / 20] = 0.0;
+			worldG[lDownY / 20][lDownX / 20] = value;
+			worldB[lDownY / 20][lDownX / 20] = 0;
 			break;
 
 		case 5:
 			value = rand() % 256;
-			worldG[lDownY / 20][lDownX / 20] = (float)value / 255;
+			worldG[lDownY / 20][lDownX / 20] = value;
 			value = rand() % 256;
-			worldB[lDownY / 20][lDownX / 20] = (float)value / 255;
-			worldR[lDownY / 20][lDownX / 20] = 0.0;
+			worldB[lDownY / 20][lDownX / 20] = value;
+			worldR[lDownY / 20][lDownX / 20] = 0;
 			break;
 
 		case 6:
 			value = rand() % 256;
-			worldR[lDownY / 20][lDownX / 20] = (float)value / 255;
+			worldR[lDownY / 20][lDownX / 20] = value;
 			value = rand() % 256;
-			worldB[lDownY / 20][lDownX / 20] = (float)value / 255;
-			worldG[lDownY / 20][lDownX / 20] = 0.0;
+			worldB[lDownY / 20][lDownX / 20] = value;
+			worldG[lDownY / 20][lDownX / 20] = 0;
+			break;
+
+		case 7:
+			value = rand() % 256;
+			worldR[lDownY / 20][lDownX / 20] = value;
+			value = rand() % 256;
+			worldB[lDownY / 20][lDownX / 20] = value;
+			value = rand() % 256;
+			worldG[lDownY / 20][lDownX / 20] = value;
 			break;
 		}
 	}
 	world_copy(first_world, world);
 
-	world_copy(prev_worldR, worldR);
-	world_copy(prev_worldG, worldG);
-	world_copy(prev_worldB, worldB);
+	world_copy_color(prev_worldR, worldR);
+	world_copy_color(prev_worldG, worldG);
+	world_copy_color(prev_worldB, worldB);
 }
 
 void mouseButton(int button, int state, int x, int y) {
@@ -402,7 +483,13 @@ void mouseButton(int button, int state, int x, int y) {
 			//нажатие кнопки очистки поля
 			if (x > 600 && x < 700 && y > 50 && y < 100) {
 				null_world(world);
+
+				delete_worlds(root);
+				root = NULL;
+
 				start = 0;
+				period = 0;
+				received_period = 0;
 			}
 
 			//нажатие кнопки следующего поколения
@@ -419,10 +506,33 @@ void mouseButton(int button, int state, int x, int y) {
 				condition = world_cmp(world, prev_world);
 				liveCondition = live_cells(world);
 				periodCondition = world_cmp(world, first_world);
+				period++;
+
+				if (root == NULL)
+				{
+					root = create_root(world);
+					ptr = root;
+				}
+				else ptr = create_elem(ptr, world);
+
+				//ptr = create_elem(ptr, world);
 			}
 
 			//нажатие кнопки старт
-			if (x > 450 && x < 550 && y > 50 && y < 100) start = 1;
+			if (x > 450 && x < 550 && y > 50 && y < 100) {
+				start = 1;
+
+				root = create_root(world);
+				ptr = root;
+
+				if (live_cells(world) == 0) {
+					liveCondition = 1;
+					condition = 0;
+					periodCondition = 0;
+					start = 0;
+					new_period_condition = 0;
+				}
+			}
 
 			//нажатие кнопки стоп
 			if (x > 450 && x < 550 && y > 250 && y < 300) {
@@ -432,6 +542,11 @@ void mouseButton(int button, int state, int x, int y) {
 
 			//нажатие кнопки рандомной генерации
 			if (x > 450 && x < 550 && y > 150 && y < 200) {
+				null_world(world);
+
+				delete_worlds(root);
+				root = NULL;
+
 				start = 0;
 				random_world(world);
 
@@ -473,6 +588,16 @@ void create_button_text(char *text, float x, float y) {
 	}
 }
 
+void create_text(char *text, float x, float y) {
+	char *c;
+
+	glColor3f(1.0, 1.0, 1.0);
+	glRasterPos2f(x, y);
+	for (c = text; *c != '\0'; c++) {
+		glutBitmapCharacter(font, *c);
+	}
+}
+
 void paint_world() {
 	float x = 0.0, y = 0.0;
 
@@ -487,7 +612,8 @@ void paint_world() {
 				for (y = (j * 20) + 1; y < t1 - 1; y++) {
 					for(x = (i * 20 + 1); x < t - 1; x++) {
 						//glColor3f(1.0, 0.0, 0.0);
-						glColor3f(worldR[i][j], worldG[i][j], worldB[i][j]);
+						glColor3ub(worldR[i][j], worldG[i][j], worldB[i][j]);
+						//glColor3f(worldR[i][j], worldG[i][j], worldB[i][j]);
 						glVertex2f(y, x);
 					}
 				}
@@ -504,13 +630,11 @@ void create_grid() {
 
 	glBegin(GL_LINES);
 	glColor3d(1, 1, 1);
-	for (float i = 0 + x; i <= WinWid + x; i += 20.0)
-	{
+	for (float i = 0 + x; i <= WinWid + x; i += 20.0){
 		glVertex2f(i, 0 + y);
 		glVertex2f(i, WinHight + y);
 	}
-	for (float i = 0 + y; i <= WinHight + y; i += 20.0)
-	{
+	for (float i = 0 + y; i <= WinHight + y; i += 20.0){
 		glVertex2f(0 + x, i);
 		glVertex2f(WinWid + x, i);
 	}
@@ -534,6 +658,40 @@ void Draw() {
 	create_button_text("Stop", 480, 280);
 	create_button_text("Clear", 630, 80);
 	create_button_text("Next", 630, 180);
+
+	/*create_button(600, 700, 250, 300);
+
+	if (condition == 1) {
+		create_button_text("Stable figure", 600, 280);
+		periodCondition = 0;
+	}
+	if (periodCondition == 1) {
+		char per[100] = "Period is ";
+		char digit[6];
+
+		itoa(period, digit, 10);
+		strcat(per, digit);
+		create_button_text(per, 600, 280);
+	}
+	if (liveCondition == 0) create_button_text ("World dead", 600, 280);*/
+
+	if (condition == 1) {
+		create_text("Stable figure", 450, 350);
+		periodCondition = 0;
+	}
+	if (liveCondition == 0) create_text("All cells dead", 450, 350);
+
+      received_period = check_period(root, world);
+	if (received_period > 0) {
+		char per[100] = "Period is ";
+		char digit[6];
+
+		new_period_condition = 1;
+		itoa(received_period, digit, 10);
+		strcat(per, digit);
+		create_text(per, 450, 350);
+	}
+	else new_period_condition = 0;
 	
 	create_grid();  //рисовка сетки
 	paint_world();  //рисовка мира
@@ -541,6 +699,7 @@ void Draw() {
 	glPopMatrix();
 
 	glutSwapBuffers();
+
 
 	if (start == 1) {
 		world_copy(prev_world, world);
@@ -553,6 +712,13 @@ void Draw() {
 		condition = world_cmp(world, prev_world);
 		liveCondition = live_cells(world);
 		periodCondition = world_cmp(world, first_world);
+		period++;
+
+		ptr = create_elem(ptr, world);
+
+		if (liveCondition == 0 || condition == 1 || periodCondition == 1 || new_period_condition == 1) start = 0;
+		
+
 	}
 }
 
@@ -580,8 +746,6 @@ int main(int argc, char **argv) {
 	glutDisplayFunc(Draw);
 	glutMouseFunc(mouseButton);
 	glutTimerFunc(200, Timer, 0);
-
-	if (liveCondition == 0 || condition == 1 || periodCondition == 1) start = 0;
 
 	Initialize();
 
