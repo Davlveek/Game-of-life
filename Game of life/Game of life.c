@@ -675,14 +675,16 @@ void Draw() {
 	}
 	if (liveCondition == 0) create_button_text ("World dead", 600, 280);*/
 
-	if (condition == 1) {
+	if (condition == 1 && liveCondition > 0) {
 		create_text("Stable figure", 450, 350);
 		periodCondition = 0;
+    	new_period_condition = 0;
 	}
 	if (liveCondition == 0) create_text("All cells dead", 450, 350);
 
-      received_period = check_period(root, world);
-	if (received_period > 0) {
+	received_period = check_period(root, world);
+	
+	if (received_period > 1) {
 		char per[100] = "Period is ";
 		char digit[6];
 
