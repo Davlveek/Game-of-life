@@ -470,6 +470,8 @@ void paint_cell(float x, float y) {
 	world_copy_color(prev_worldR, worldR);
 	world_copy_color(prev_worldG, worldG);
 	world_copy_color(prev_worldB, worldB);
+
+
 }
 
 void mouseButton(int button, int state, int x, int y) {
@@ -514,8 +516,6 @@ void mouseButton(int button, int state, int x, int y) {
 					ptr = root;
 				}
 				else ptr = create_elem(ptr, world);
-
-				//ptr = create_elem(ptr, world);
 			}
 
 			//нажатие кнопки старт
@@ -561,7 +561,16 @@ void mouseButton(int button, int state, int x, int y) {
 			}
 
 			//ручное заполнение
-			if (x > 0 && x < 400 && y > 0 && y < 400) paint_cell(x, y);
+			if (x > 0 && x < 400 && y > 0 && y < 400) {
+				paint_cell(x, y);
+				
+				if (root == NULL)
+				{
+					root = create_root(world);
+					ptr = root;
+				}
+				else ptr = create_elem(ptr, world);
+			}
 
 		}
 	}
@@ -716,7 +725,12 @@ void Draw() {
 		periodCondition = world_cmp(world, first_world);
 		period++;
 
-		ptr = create_elem(ptr, world);
+		if (root == NULL)
+		{
+			root = create_root(world);
+			ptr = root;
+		}
+		else ptr = create_elem(ptr, world);
 
 		if (liveCondition == 0 || condition == 1 || periodCondition == 1 || new_period_condition == 1) start = 0;
 		
